@@ -63,7 +63,7 @@ Completion policy:
 ## After Milestone
 
 - Update PLAN.md active milestone, open_gates, next_exact_task, next_if_unmet.
-- Update PROGRESS.md current_task, checklist_state, activity_log, evidence, route_queue, memory_index, lessons, closing.
+- Update PROGRESS.md current_task, checklist_state, activity_log, evidence, optional evidence_jsonl final/audit mirror, route_queue, memory_index, lessons, closing.
 - Promote durable facts to docs/PROJECT_MEMORY.md or the domain memory doc.
 - Create/update the next `goals/*.md` when the next task should be reusable.
 - If the host loop continues and the next step is safe, start the next artifact/tool/code work before ending the turn.

@@ -62,6 +62,13 @@ Format: `[M# from=E#] <path>; role=<doc|script|fixture|analysis|code>; status=<c
 
     none
 
+## evidence_jsonl
+
+    none
+
+Format: optional machine-readable mirror for final/audit evidence rows:
+`{"id":"E#","cp":"cp_final","axis":"signal_a","kept":true,"fresh":true,"result":"pass","source":"command_output"}`
+
 ## lessons
 
     none

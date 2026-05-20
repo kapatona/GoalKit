@@ -92,6 +92,7 @@ PROGRESS.md schema:
     objective_lock: source_objective, terminal_deliverables, missing_deliverables, deferred_deliverables, completion_class, recovery_ladder, host_complete_policy, verified_unmet_close_policy, source_close_authority(source=USER_GOAL|path quote="..."), continuation_markers.
     state: updated, goal_start, active_goal, status, autonomy, checkpoint, current_task, checklist_state, next_action, next_bounded_path, route_discovery, productive_output, blockers, caps, done_gate, objective_fidelity, terminal_outcome, open_gates, checkpoint_state.
     evidence: [E# timestamp cp=<id> axis=<enum|-> kept=<true|false|n/a> fresh=<true|false>] hypothesis | result | source.
+    evidence_jsonl(optional): one JSON object per final/audit E# mirror with id, cp, axis, kept(bool), fresh(bool), result, source, and optional matches(int)/command/artifact.
     route_queue: ordered next tasks with reason, verifier, dependency.
     activity_log: newest-first rows: [timestamp current_task] action; output; verified; next.
     memory_index: durable docs/goals/scripts with role and supporting E#.
@@ -103,7 +104,7 @@ Evidence sources: command_output, test_output, artifact(path+sha256 or inspected
 
 Forbidden inference: compile success proves behavior; one search proves absence; no logs proves no failure; file exists proves correctness; LLM said correct. Claims without evidence are guesses.
 
-Compact PROGRESS.md when evidence exceeds 50 rows or 10KB. Preserve state, objective_lock, current_task, checklist_state, final fresh E#, kept E# mapped to done_gate/objective_fidelity, open escalations, lessons, closing, last 10 activity_log rows, and last 10 nonfinal evidence rows. Large output belongs in artifacts/logs.
+Compact PROGRESS.md when evidence exceeds 50 rows or 10KB. Preserve state, objective_lock, current_task, checklist_state, final fresh E#, kept E# mapped to done_gate/objective_fidelity, matching evidence_jsonl rows, open escalations, lessons, closing, last 10 activity_log rows, and last 10 nonfinal evidence rows. Large output belongs in artifacts/logs.
 
 ## 6 completion
 

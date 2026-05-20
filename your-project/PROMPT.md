@@ -123,6 +123,8 @@ milestone boundary, or real escalation. Keep it as an index, not a transcript.
 Record current_task status/output/verifier/next task, checklist_state, artifacts,
 literal verifier result, kept/not_kept evidence, false predicates, next route,
 evidence-backed lessons, and risks that affect the next turn.
+For final/audit evidence, mirror the decisive E# rows in `evidence_jsonl` when
+that section exists.
 
 ## 9 Audit
 

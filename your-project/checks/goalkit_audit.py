@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import hashlib
+import json
 import re
 import subprocess
 import sys
@@ -240,6 +241,11 @@ def any_line_value(root: Path, key: str) -> str:
         if value:
             return value
     return ""
+
+
+def active_run(root: Path) -> bool:
+    status = line_value(read(root / "PROGRESS.md"), "status").lower()
+    return bool(status) and status != "not_started"
 
 
 def source_close_value(root: Path) -> str:
@@ -548,9 +554,11 @@ def check_completion_no_pending_task(root: Path) -> tuple[bool, str]:
     return True, "completion_pending_task"
 
 
-def check_independence(root: Path) -> tuple[bool, str]:
+def check_independence(root: Path, strict: bool = False) -> tuple[bool, str]:
     goal = read(root / "GOAL.md")
     if "signal_a:" not in goal or "signal_b:" not in goal:
+        if strict and active_run(root):
+            return False, "independence_no_signals"
         return True, "independence=no_signals"
     if "/goal <verb phrase" in goal or "<literal observable requirement>" in goal:
         return True, "independence=template"
@@ -560,16 +568,166 @@ def check_independence(root: Path) -> tuple[bool, str]:
     return True, "independence"
 
 
-def check_secret_scan_shape(root: Path) -> tuple[bool, str]:
+def check_secret_scan_shape(root: Path, strict: bool = False) -> tuple[bool, str]:
     goal = read(root / "GOAL.md")
     if "secret_redaction_scan:" not in goal:
+        if strict and active_run(root):
+            return False, "secret_scan_missing"
         return True, "secret_scan=not_declared"
     line = line_value(goal, "secret_redaction_scan")
     if "<command>" in line:
+        if strict and active_run(root):
+            return False, "secret_scan_placeholder"
         return True, "secret_scan=placeholder"
     if "expected 0" not in goal or "self_silent=true" not in goal:
         return False, "secret_scan_not_self_silent"
     return True, "secret_scan"
+
+
+def evidence_jsonl_records(root: Path) -> tuple[list[dict[str, object]], list[str]]:
+    body = section(read(root / "PROGRESS.md"), "evidence_jsonl")
+    records: list[dict[str, object]] = []
+    errors: list[str] = []
+    seen: set[str] = set()
+    for lineno, line in enumerate(body.splitlines(), 1):
+        raw = line.strip()
+        if (
+            not raw
+            or raw.lower() == "none"
+            or raw.startswith("#")
+            or raw.startswith("```")
+            or raw.startswith("`")
+            or raw.lower().startswith("format:")
+        ):
+            continue
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            errors.append(f"line{lineno}:{exc.msg}")
+            continue
+        if not isinstance(value, dict):
+            errors.append(f"line{lineno}:not_object")
+            continue
+        evidence_id = value.get("id")
+        if not isinstance(evidence_id, str) or not re.fullmatch(r"E\d+", evidence_id):
+            errors.append(f"line{lineno}:bad_id")
+            continue
+        if evidence_id in seen:
+            errors.append(f"line{lineno}:duplicate_id:{evidence_id}")
+            continue
+        schema_error = evidence_jsonl_schema_error(value)
+        if schema_error:
+            errors.append(f"line{lineno}:{schema_error}")
+            continue
+        seen.add(evidence_id)
+        records.append(value)
+    return records, errors
+
+
+def evidence_jsonl_schema_error(record: dict[str, object]) -> str:
+    required = ("id", "cp", "axis", "kept", "fresh", "result", "source")
+    missing = [key for key in required if key not in record]
+    if missing:
+        return "missing_" + ",".join(missing)
+    for key in ("cp", "axis", "result", "source"):
+        value = record.get(key)
+        if not isinstance(value, str) or not useful(value):
+            return "bad_" + key
+    if not isinstance(record.get("kept"), bool):
+        return "bad_kept"
+    if not isinstance(record.get("fresh"), bool):
+        return "bad_fresh"
+    if "matches" in record and (isinstance(record.get("matches"), bool) or not isinstance(record.get("matches"), int)):
+        return "bad_matches"
+    return ""
+
+
+def evidence_jsonl_by_id(root: Path) -> tuple[dict[str, dict[str, object]], list[str]]:
+    records, errors = evidence_jsonl_records(root)
+    return {str(record["id"]): record for record in records}, errors
+
+
+def json_truthy(value: object) -> bool:
+    return value is True or str(value).strip().lower() == "true"
+
+
+def json_record_text(record: dict[str, object]) -> str:
+    return " ".join(str(value) for value in record.values())
+
+
+def check_evidence_jsonl_valid(root: Path) -> tuple[bool, str]:
+    body = section(read(root / "PROGRESS.md"), "evidence_jsonl")
+    if not body.strip():
+        return True, "evidence_jsonl=absent"
+    records, errors = evidence_jsonl_records(root)
+    if errors:
+        return False, "evidence_jsonl_invalid=" + ",".join(errors[:3])
+    return True, "evidence_jsonl" if records else "evidence_jsonl=none"
+
+
+def evidence_line(text: str, evidence_id: str) -> str:
+    pattern = re.compile(rf"^\s*\[{re.escape(evidence_id)}\b[^\n]*$", re.MULTILINE)
+    match = pattern.search(text)
+    return match.group(0) if match else ""
+
+
+def check_done_gate_fresh(root: Path) -> tuple[bool, str]:
+    progress = read(root / "PROGRESS.md")
+    done_gate = line_value(progress, "done_gate")
+    if "pass" not in done_gate.lower():
+        return False, "done_gate_not_pass"
+    ids = re.findall(r"\bE\d+\b", done_gate)
+    if not ids:
+        return False, "done_gate_without_evidence"
+    json_rows, json_errors = evidence_jsonl_by_id(root)
+    if json_errors:
+        return False, "evidence_jsonl_invalid=" + ",".join(json_errors[:3])
+    stale_or_missing = []
+    for evidence_id in ids:
+        json_row = json_rows.get(evidence_id)
+        if json_row:
+            fresh = json_truthy(json_row.get("fresh"))
+        else:
+            row = evidence_line(progress, evidence_id)
+            fresh = bool(row and "fresh=true" in row)
+        if not fresh:
+            stale_or_missing.append(evidence_id)
+    if stale_or_missing:
+        return False, "done_gate_stale=" + ",".join(stale_or_missing)
+    return True, "done_gate_fresh"
+
+
+def check_secret_scan_evidence(root: Path) -> tuple[bool, str]:
+    shape_ok, shape_reason = check_secret_scan_shape(root, strict=True)
+    if not shape_ok:
+        return False, shape_reason
+    progress = read(root / "PROGRESS.md")
+    json_rows, json_errors = evidence_jsonl_records(root)
+    if json_errors:
+        return False, "evidence_jsonl_invalid=" + ",".join(json_errors[:3])
+    secret_rows = [
+        line
+        for line in progress.splitlines()
+        if re.search(r"\b(secret|secret_scan|secret_redaction_scan|rg_scan|redaction)\b", line, re.IGNORECASE)
+    ]
+    secret_json = [
+        record
+        for record in json_rows
+        if re.search(r"\b(secret|secret_scan|secret_redaction_scan|rg_scan|redaction)\b", json_record_text(record), re.IGNORECASE)
+    ]
+    if not secret_rows and not secret_json:
+        return False, "secret_scan_evidence_missing"
+    joined = "\n".join(secret_rows + [json_record_text(record) for record in secret_json])
+    if not re.search(r"\b(pass|passed)\b", joined, re.IGNORECASE):
+        return False, "secret_scan_not_passed"
+    json_zero = any(record.get("matches") == 0 and not isinstance(record.get("matches"), bool) for record in secret_json)
+    if not json_zero and not re.search(r"\b(matches\s*=\s*0|0\s+matches|zero\s+matches)\b", joined, re.IGNORECASE):
+        return False, "secret_scan_zero_matches_missing"
+    markdown_fresh = any("[E" in line and "fresh=true" in line for line in secret_rows)
+    json_fresh = any(json_truthy(record.get("fresh")) for record in secret_json)
+    if not markdown_fresh and not json_fresh:
+        return False, "secret_scan_not_fresh"
+    return True, "secret_scan_evidence"
 
 
 def check_repeated_blocker_hash(root: Path) -> tuple[bool, str]:
@@ -588,7 +746,7 @@ def check_blocked_close(root: Path) -> tuple[bool, str]:
     return strict_blocked_audit_authorized(root)
 
 
-def check_scope_guard(root: Path) -> tuple[bool, str]:
+def check_scope_guard(root: Path, strict: bool = False) -> tuple[bool, str]:
     progress = read(root / "PROGRESS.md")
     status = line_value(progress, "status").lower()
     if status in {"", "not_started"}:
@@ -600,6 +758,8 @@ def check_scope_guard(root: Path) -> tuple[bool, str]:
         return True, "scope_guard=no_patterns"
     changed = git_changed_files(root)
     if changed is None:
+        if strict:
+            return False, "scope_guard=git_unavailable"
         return True, "scope_guard=git_unavailable"
     hits = sorted({path for path in changed for pattern in patterns if matches_scope(path, pattern)})
     return (not hits, "scope_guard" if not hits else "scope_violation=" + ",".join(hits))
@@ -631,7 +791,7 @@ def check_verifier_registry(root: Path) -> tuple[bool, str]:
     return True, "verifier_registry=" + ("checked" if checked else "no_hash_entries")
 
 
-def run_checks(root: Path, mode: str) -> list[tuple[bool, str]]:
+def run_checks(root: Path, mode: str, strict: bool = False) -> list[tuple[bool, str]]:
     checks = [
         check_no_fixed_timeout,
         check_no_human_wait,
@@ -641,17 +801,41 @@ def run_checks(root: Path, mode: str) -> list[tuple[bool, str]]:
         check_terminal_outcome_consistency,
         check_unmet_close,
         check_completion_no_pending_task,
-        check_independence,
-        check_secret_scan_shape,
+        lambda root: check_independence(root, strict=strict),
+        lambda root: check_secret_scan_shape(root, strict=strict),
+        check_evidence_jsonl_valid,
         check_repeated_blocker_hash,
         check_blocked_close,
-        check_scope_guard,
+        lambda root: check_scope_guard(root, strict=strict),
         check_verifier_registry,
     ]
     if mode == "productive-turn":
-        checks = [check_no_fixed_timeout, check_no_human_wait, check_productive_route, check_current_task_contract, check_checklist_state, check_repeated_blocker_hash, check_blocked_close, check_scope_guard]
+        checks = [
+            check_no_fixed_timeout,
+            check_no_human_wait,
+            check_productive_route,
+            check_current_task_contract,
+            check_checklist_state,
+            check_evidence_jsonl_valid,
+            check_repeated_blocker_hash,
+            check_blocked_close,
+            lambda root: check_scope_guard(root, strict=strict),
+        ]
     elif mode == "unmet-close":
-        checks = [check_no_fixed_timeout, check_no_human_wait, check_checklist_state, check_terminal_outcome_consistency, check_unmet_close_ready, check_completion_no_pending_task, check_scope_guard, check_verifier_registry]
+        checks = [
+            check_no_fixed_timeout,
+            check_no_human_wait,
+            check_checklist_state,
+            check_terminal_outcome_consistency,
+            check_unmet_close_ready,
+            check_completion_no_pending_task,
+            check_done_gate_fresh,
+            lambda root: check_independence(root, strict=True),
+            check_secret_scan_evidence,
+            check_evidence_jsonl_valid,
+            lambda root: check_scope_guard(root, strict=strict),
+            check_verifier_registry,
+        ]
     return [check(root) for check in checks]
 
 
@@ -708,10 +892,79 @@ def selftest() -> int:
         root = Path(tmp)
         write_minimal(
             root,
-            "# PROGRESS\n\n## state\n\n    active_goal: Run a finite audit. This finite audit may end with an unmet report.\n    status: unmet\n    completion_class: single_goal\n    terminal_outcome: verified_unmet evidence=E1\n    open_gates: none\n    next_bounded_path: n/a\n    done_gate: pass evidence=E1,E2\n",
-            "# GOAL\n\n    host_complete_policy: closeable_verified_unmet\n    verified_unmet_close_policy: closeable\n    source_close_authority: source=USER_GOAL quote=\"This finite audit may end with an unmet report.\"\n    continuation_markers: none\n",
+            "# PROGRESS\n\n## state\n\n    active_goal: Run a finite audit. This finite audit may end with an unmet report.\n    status: unmet\n    completion_class: single_goal\n    terminal_outcome: verified_unmet evidence=E1,E2\n    open_gates: none\n    next_bounded_path: n/a\n    done_gate: pass evidence=E1,E2\n\n## evidence\n\n    [E1 now cp=cp_final axis=signal_a kept=true fresh=true] result | signal_a pass. | source=command_output\n    [E2 now cp=cp_final axis=signal_b,secret_scan kept=true fresh=true] result | signal_b pass; secret_scan pass matches=0. | source=command_output\n",
+            "# GOAL\n\n    host_complete_policy: closeable_verified_unmet\n    verified_unmet_close_policy: closeable\n    source_close_authority: source=USER_GOAL quote=\"This finite audit may end with an unmet report.\"\n    continuation_markers: none\n    signal_a: check=report expected=verified_unmet\n    signal_b: check=audit expected=verified_unmet\n    independence: reason=A checks report; adversary=B fails if source quote is absent\n    secret_redaction_scan: rg secret; expected 0 matches; self_silent=true\n",
         )
         cases.append(("finite_unmet_with_source_close_passes", all(ok for ok, _ in run_checks(root, "unmet-close")), "expected pass"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    active_goal: Run a finite audit. This finite audit may end with an unmet report.\n    status: unmet\n    completion_class: single_goal\n    terminal_outcome: verified_unmet evidence=E1,E2\n    open_gates: none\n    next_bounded_path: n/a\n    done_gate: pass evidence=E1,E2\n\n## evidence_jsonl\n\n    {\"id\":\"E1\",\"cp\":\"cp_final\",\"axis\":\"signal_a\",\"kept\":true,\"fresh\":true,\"result\":\"pass\",\"source\":\"command_output\"}\n    {\"id\":\"E2\",\"cp\":\"cp_final\",\"axis\":\"signal_b,secret_scan\",\"kept\":true,\"fresh\":true,\"result\":\"pass\",\"matches\":0,\"source\":\"command_output\"}\n",
+            "# GOAL\n\n    host_complete_policy: closeable_verified_unmet\n    verified_unmet_close_policy: closeable\n    source_close_authority: source=USER_GOAL quote=\"This finite audit may end with an unmet report.\"\n    continuation_markers: none\n    signal_a: check=report expected=verified_unmet\n    signal_b: check=audit expected=verified_unmet\n    independence: reason=A checks report; adversary=B fails if source quote is absent\n    secret_redaction_scan: rg secret; expected 0 matches; self_silent=true\n",
+        )
+        cases.append(("finite_unmet_jsonl_evidence_passes", all(ok for ok, _ in run_checks(root, "unmet-close")), "expected pass"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    active_goal: Run a finite audit. This finite audit may end with an unmet report.\n    status: unmet\n    completion_class: single_goal\n    terminal_outcome: verified_unmet evidence=E1,E2\n    open_gates: none\n    next_bounded_path: n/a\n    done_gate: pass evidence=E1,E2\n\n## evidence_jsonl\n\n    {\"id\":\"E1\",\"cp\":\"cp_final\",\"axis\":\"signal_a\",\"kept\":true,\"fresh\":true,\"result\":\"pass\",\"source\":\"command_output\"}\n    {\"id\":\"E2\",\"cp\":\"cp_final\",\"axis\":\"signal_b,secret_scan\",\"kept\":true,\"fresh\":false,\"result\":\"pass\",\"matches\":0,\"source\":\"command_output\"}\n",
+            "# GOAL\n\n    host_complete_policy: closeable_verified_unmet\n    verified_unmet_close_policy: closeable\n    source_close_authority: source=USER_GOAL quote=\"This finite audit may end with an unmet report.\"\n    continuation_markers: none\n    signal_a: check=report expected=verified_unmet\n    signal_b: check=audit expected=verified_unmet\n    independence: reason=A checks report; adversary=B fails if source quote is absent\n    secret_redaction_scan: rg secret; expected 0 matches; self_silent=true\n",
+        )
+        cases.append(("unmet_close_jsonl_stale_evidence_fails", not all(ok for ok, _ in run_checks(root, "unmet-close")), "expected fail"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    status: pursuing\n    current_task: id=M1-1; kind=docs; status=ready; output=docs/x.md; verifier=inspect docs/x.md; next=work\n    next_action: write docs/x.md\n    productive_output: docs/x.md\n\n## evidence_jsonl\n\n    {bad json}\n",
+        )
+        cases.append(("invalid_evidence_jsonl_fails", not all(ok for ok, _ in run_checks(root, "all")), "expected fail"))
+        cases.append(("productive_turn_invalid_evidence_jsonl_fails", not all(ok for ok, _ in run_checks(root, "productive-turn")), "expected fail"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    status: pursuing\n    current_task: id=M1-1; kind=docs; status=ready; output=docs/x.md; verifier=inspect docs/x.md; next=work\n    next_action: write docs/x.md\n    productive_output: docs/x.md\n\n## evidence_jsonl\n\n    {\"id\":\"E1\",\"fresh\":true}\n",
+        )
+        cases.append(("evidence_jsonl_missing_required_fields_fails", not all(ok for ok, _ in run_checks(root, "all")), "expected fail"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    status: pursuing\n    current_task: id=M1-1; kind=docs; status=ready; output=docs/x.md; verifier=inspect docs/x.md; next=work\n    next_action: write docs/x.md\n    productive_output: docs/x.md\n\n## evidence_jsonl\n\n    {\"id\":\"E1\",\"cp\":\"cp_0\",\"axis\":\"signal_a\",\"kept\":\"true\",\"fresh\":true,\"result\":\"pass\",\"source\":\"command_output\"}\n",
+        )
+        cases.append(("evidence_jsonl_string_bool_fails", not all(ok for ok, _ in run_checks(root, "all")), "expected fail"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    status: pursuing\n    current_task: id=M1-1; kind=docs; status=ready; output=docs/x.md; verifier=inspect docs/x.md; next=work\n    next_action: write docs/x.md\n    productive_output: docs/x.md\n\n## evidence_jsonl\n\n    {\"id\":\"E1\",\"cp\":\"cp_0\",\"axis\":\"secret_scan\",\"kept\":true,\"fresh\":true,\"result\":\"pass\",\"source\":\"command_output\",\"matches\":\"0\"}\n",
+        )
+        cases.append(("evidence_jsonl_string_matches_fails", not all(ok for ok, _ in run_checks(root, "all")), "expected fail"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    active_goal: Run a finite audit. This finite audit may end with an unmet report.\n    status: unmet\n    completion_class: single_goal\n    terminal_outcome: verified_unmet evidence=E1,E2\n    open_gates: none\n    next_bounded_path: n/a\n    done_gate: pass evidence=E1,E2\n\n## evidence\n\n    [E1 now cp=cp_final axis=signal_a kept=true fresh=true] result | signal_a pass. | source=command_output\n    [E2 now cp=cp_final axis=signal_b,secret_scan kept=true fresh=true] result | signal_b pass; secret_scan pass matches=0. | source=command_output\n",
+            "# GOAL\n\n    host_complete_policy: closeable_verified_unmet\n    verified_unmet_close_policy: closeable\n    source_close_authority: source=USER_GOAL quote=\"This finite audit may end with an unmet report.\"\n    continuation_markers: none\n    signal_a: check=report expected=verified_unmet\n    signal_b: check=audit expected=verified_unmet\n    secret_redaction_scan: rg secret; expected 0 matches; self_silent=true\n",
+        )
+        cases.append(("unmet_close_missing_independence_fails", not all(ok for ok, _ in run_checks(root, "unmet-close")), "expected fail"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    active_goal: Run a finite audit. This finite audit may end with an unmet report.\n    status: unmet\n    completion_class: single_goal\n    terminal_outcome: verified_unmet evidence=E1,E2\n    open_gates: none\n    next_bounded_path: n/a\n    done_gate: pass evidence=E1,E2\n\n## evidence\n\n    [E1 now cp=cp_final axis=signal_a kept=true fresh=true] result | signal_a pass. | source=command_output\n    [E2 now cp=cp_final axis=signal_b kept=true fresh=true] result | signal_b pass. | source=command_output\n",
+            "# GOAL\n\n    host_complete_policy: closeable_verified_unmet\n    verified_unmet_close_policy: closeable\n    source_close_authority: source=USER_GOAL quote=\"This finite audit may end with an unmet report.\"\n    continuation_markers: none\n    signal_a: check=report expected=verified_unmet\n    signal_b: check=audit expected=verified_unmet\n    independence: reason=A checks report; adversary=B fails if source quote is absent\n    secret_redaction_scan: rg secret; expected 0 matches; self_silent=true\n",
+        )
+        cases.append(("unmet_close_missing_secret_evidence_fails", not all(ok for ok, _ in run_checks(root, "unmet-close")), "expected fail"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    active_goal: Run a finite audit. This finite audit may end with an unmet report.\n    status: unmet\n    completion_class: single_goal\n    terminal_outcome: verified_unmet evidence=E1,E2\n    open_gates: none\n    next_bounded_path: n/a\n    done_gate: pass evidence=E1,E2\n\n## evidence\n\n    [E1 now cp=cp_final axis=signal_a kept=true fresh=true] result | signal_a pass. | source=command_output\n    [E2 now cp=cp_final axis=signal_b,secret_scan kept=true fresh=false] result | signal_b pass; secret_scan pass matches=0. | source=command_output\n",
+            "# GOAL\n\n    host_complete_policy: closeable_verified_unmet\n    verified_unmet_close_policy: closeable\n    source_close_authority: source=USER_GOAL quote=\"This finite audit may end with an unmet report.\"\n    continuation_markers: none\n    signal_a: check=report expected=verified_unmet\n    signal_b: check=audit expected=verified_unmet\n    independence: reason=A checks report; adversary=B fails if source quote is absent\n    secret_redaction_scan: rg secret; expected 0 matches; self_silent=true\n",
+        )
+        cases.append(("unmet_close_stale_done_gate_fails", not all(ok for ok, _ in run_checks(root, "unmet-close")), "expected fail"))
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_minimal(
@@ -957,6 +1210,22 @@ def selftest() -> int:
         cases.append(("scope_guard_violation_fails", not all(ok for ok, _ in run_checks(root, "all")), "expected fail"))
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    status: pursuing\n    current_task: id=M5-1; kind=docs; status=ready; output=docs/x.md; verifier=inspect docs/x.md; next=work\n    next_action: work\n    productive_output: docs/x.md\n",
+            "# GOAL\n\n    scope_must_not_change: protected.txt\n    secret_redaction_scan: rg secret; expected 0 matches; self_silent=true\n",
+        )
+        cases.append(("strict_git_unavailable_fails", not all(ok for ok, _ in run_checks(root, "all", strict=True)), "expected fail"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_minimal(
+            root,
+            "# PROGRESS\n\n## state\n\n    status: pursuing\n    current_task: id=M5-1; kind=docs; status=ready; output=docs/x.md; verifier=inspect docs/x.md; next=work\n    next_action: work\n    productive_output: docs/x.md\n",
+            "# GOAL\n\n    secret_redaction_scan: <command>; expected 0 matches; self_silent=true\n",
+        )
+        cases.append(("strict_secret_placeholder_fails", not all(ok for ok, _ in run_checks(root, "all", strict=True)), "expected fail"))
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
         init_git(root)
         write_minimal(
             root,
@@ -995,12 +1264,13 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Run optional GoalKit audit checks.")
     parser.add_argument("--root", default=".", help="GoalKit/project root")
     parser.add_argument("--mode", choices=("all", "productive-turn", "unmet-close"), default="all")
+    parser.add_argument("--strict", action="store_true", help="Fail active runs on missing/placeholder secret scan or unavailable git scope guard")
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args(argv)
     if args.selftest:
         return selftest()
     root = Path(args.root).resolve()
-    results = run_checks(root, args.mode)
+    results = run_checks(root, args.mode, strict=args.strict)
     failed = [reason for ok, reason in results if not ok]
     if failed:
         print("goalkit_audit: fail " + " ".join(failed))

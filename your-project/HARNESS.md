@@ -50,8 +50,8 @@ Project-specific assets should use the repository's own conventions, such as
 
 1. Create or open the project root.
 2. Copy the GoalKit file set into that root.
-3. For first-run setup, either start a detailed direct `/goal`, or use the
-   GoalKit README Plan prompt to create a durable plan file for broad projects.
+3. For first-run setup, either start a detailed direct `/goal`, or start
+   `/goal` against a durable plan/spec file that already exists.
 4. Keep `PROMPT.md` short enough to read every turn.
 5. Put long operator instructions in this file, not in `PROMPT.md`.
 6. Do not pre-fill `GOAL.md`, `PLAN.md`, or `PROGRESS.md` by hand for first
@@ -76,9 +76,8 @@ For a broad project with a plan file:
 ```
 
 If the objective is already detailed, a direct `/goal` may skip a plan file. For
-broad or ambiguous work, use the GoalKit README Plan prompt first. Plan mode
-produces the proposed launch document; Default mode should write only that plan
-file. Do not start a plan-based `/goal` from an unwritten plan.
+broad or ambiguous work, create or inspect a durable plan/spec file first. Do
+not start a plan-based `/goal` from an unwritten plan.
 
 The goal should be concrete enough to extract terminal deliverables. If the
 source is broad, GoalKit should start with a light adaptive roadmap and first
@@ -174,7 +173,10 @@ When `checks/goalkit_audit.py` exists, GoalKit instructions make Codex run the
 relevant mode during suspicious local-gate, unmet-close, milestone-boundary, or
 completion-adjacent states. This is an unattended guard, not a required manual
 operator step. Use it for debugging only when inspecting or maintaining the
-harness itself.
+harness itself. `--strict` is for post-bootstrap runs where git scope checks and
+secret scan configuration are expected to be concrete.
+The guard accepts Markdown evidence rows and the optional `PROGRESS.md`
+`evidence_jsonl` mirror for final/audit evidence.
 
 ## 10 Verifier Registry
 
