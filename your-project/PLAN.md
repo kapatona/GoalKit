@@ -1,6 +1,6 @@
 # PLAN
 
-Optional outer plan for multi-milestone projects. Do not use for single-goal work. Structured mode maps one finite milestone to one GOAL.md and one `/goal` run. Autonomous_project mode may advance multiple milestones inside one broad prose `/goal`; update_goal complete is allowed only after terminal_outcome=success, host_complete_policy, open_gates=none, global_done_gate, and final GOAL.md done_gate all pass.
+Optional outer plan for multi-milestone projects. Single-goal work may leave this mostly unused. Structured mode maps one finite milestone to one GOAL.md and `/goal` run; autonomous_project may advance milestones inside one broad `/goal`. Host completion still requires terminal_outcome=success, host_complete_policy, open_gates=none, global_done_gate, and final GOAL.md done_gate.
 
 ## project
 
@@ -58,11 +58,11 @@ Rows are ordered. During an active goal, do not create, reorder, complete, skip,
       next_if_unmet: -
       gate: <evidence>
 
-Foundation milestones may satisfy foundation_done_gate but not global_done_gate. achieved=terminal success; unmet=verified_unmet. If terminal_coverage is incomplete and in-scope paths remain, continue. Open-ended build/research/analysis/continue objectives treat unmet as milestone state only; finite single-goal audit/report needs source_close_authority to close as unmet. Carry open_gates and next_if_unmet forward. Readiness, verifiers, checklists, or verified_unmet reports are not project completion.
+Policy: achieved=terminal success; unmet=verified_unmet milestone state. Readiness, verifiers, checklists, and verified_unmet reports are not project completion. Checklist closes only when complete and no executable next item remains. If terminal_coverage or open_gates remain and in-scope paths exist, carry next_if_unmet/next_bounded_path forward.
 
-Roadmap rule: each achieved/unmet milestone leaves a next dependency-ready milestone/current_task, next_exact_task, next_if_unmet, route_discovery task, or finite-audit final gate with source_close_authority. Checklist milestones close only when checklist_state is complete and no executable next remains. False readiness preserves facts and names the next evidence path. next_exact_task/current_task must be project work. Registration-only milestones must create the next executable current_task and start it same turn when safe.
+Roadmap rule: each closed milestone leaves a dependency-ready next milestone/current_task, next_exact_task, next_if_unmet, route_discovery task, or finite-audit final gate with source_close_authority. Registration-only milestones start the first safe executable task same turn.
 
-Tier 1 activation: create/update handoff/checklist/goals docs only when useful: 3+ substeps, 2+ verifier surfaces, cross-session risk, or large long-running work. They are memory aids, not terminal proof. Handoff records promoted facts, false gates, rejected shortcuts, checklist_state, next_exact_task, current_task, next_bounded_path, changed paths, and verifier evidence.
+Tier 1 docs: create handoff/checklist/goals docs only for 3+ substeps, 2+ verifier surfaces, cross-session risk, or large long-running work. They record promoted facts, false gates, rejected shortcuts, checklist/current_task state, next route, changed paths, and verifier evidence.
 
 ## cross_goal_lessons
 

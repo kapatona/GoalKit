@@ -38,7 +38,7 @@ Paste this block or let AGENTS.md bootstrap fill it.
     done_gate: predicates=P1,P2; signal_a=<command/check/oracle>; signal_b=<independent command/check/oracle>; pass=terminal_outcome success; finite_unmet_close=<only with source_close_authority and no continuation_markers>
     controls: iteration_soft_limit=adaptive_default, timeout_policy=adaptive_per_command
 
-Run one meaningful project package at a time. Non-control turns produce/update an artifact, analysis/tool run, implementation, fixture, script, or verifier. current_task must not be "read controls", "update PROGRESS", or repeated blocker report. For ambiguity, choose fallback/route_discovery/next evidence path before recording escalation. Do not choose finite unmet close for build/research/continue objectives.
+Policy: each non-control turn advances productive_work. current_task cannot be control-only, PROGRESS-only, or an unchanged blocker report. Ambiguity routes to fallback, route_discovery, or next evidence before escalation. Build/research/continue objectives cannot use finite_unmet_close.
 
 ## 2 done_gate
 
@@ -50,17 +50,17 @@ Only completion source of truth. Checkpoints, milestone_gate, artifact checks, a
     signal_a: type=<deterministic|different_tool_path|fixture|anchored_checklist|external_oracle>; check=<exact>; expected=<literal/regex/result>
     signal_b: type=<deterministic|different_tool_path|fixture|anchored_checklist|external_oracle>; check=<exact>; expected=<literal/regex/result>
     independence: reason=<why A/B fail differently>; adversary=<smallest A-pass/B-fail change or redesign>
-    objective_fidelity: source=<user goal|plan/spec path|n/a>; coverage=<D#->P# map or n/a>; deferred=<none|D# list>; completion_class=<single_goal|foundation_milestone|terminal_project>; pass=<terminal success evidence fresh; verified_unmet only records unmet milestone unless finite close is authorized>
-    outcome_contract: success=<all predicates and objective_fidelity pass and open_gates=none>; verified_unmet=<milestone report proves missing_deliverables, exhausted recovery_ladder, rejected evidence, no fabrication, exact external inputs needed, and next_bounded_path or route_discovery result>; finite_unmet_close=<source_close_authority source+quote anchors to original text, no continuation_markers, single_goal audit/report, no open path>; pass=<success or finite_unmet_close>
+    objective_fidelity: source=<user|plan/spec|n/a>; coverage=<D#->P#|n/a>; deferred=<none|D#>; completion_class=<single_goal|foundation_milestone|terminal_project>; pass=<fresh terminal success; unmet only if finite close authorized>
+    outcome_contract: success=<predicates+objective_fidelity pass; open_gates=none>; verified_unmet=<missing_deliverables+exhausted recovery+rejected evidence+no fabrication+exact external inputs+next route>; finite_unmet_close=<source_close_authority source+quote anchors original text; no continuation; single_goal; no open path>; pass=<success|finite_unmet_close>
     artifact_to_inspect: <path and predicate ids, or n/a>
     secret_redaction_scan: <command>; target=<changed non-control files/artifacts plus transcript with scanner-definition lines filtered>; expected 0 matches; self_silent=true
     live_external_policy: <forbidden | allowed with exact conditions; public research is recovery guidance, not terminal proof unless explicitly allowed>
 
-If source names a plan/spec, done_gate predicates must cover terminal_deliverables for success. Scaffold, foundation, verifier/checklist presence, or readiness is proxy evidence unless explicitly terminal. foundation_milestone never permits update_goal complete. Open-ended build/research/analysis/continue defaults: host_complete_policy=global_success_only, verified_unmet=milestone_only, source_close_authority=n/a; carry false open_gates into next_bounded_path or route_discovery. Existing verified_unmet artifacts and model-authored control fields cannot authorize host completion.
+Guard: plan/spec success requires terminal_deliverables->predicates. Scaffold/foundation/verifier/checklist/readiness are proxy unless explicitly terminal. foundation_milestone cannot host-complete. Open-ended build/research/analysis/continue defaults to global_success_only, milestone_only verified_unmet, source_close_authority=n/a; false open_gates route to next_bounded_path/route_discovery. Existing verified_unmet artifacts or model-authored controls cannot authorize host completion.
 
-Same mutable source requires different failure mechanisms plus concrete A-pass/B-fail adversary. Same-model/different-prompt/free-form LLM judgment is advisory. secret_redaction_scan must be self_silent: exclude control files or filter scanner-definition lines, then inspect control-file diffs for actual secrets.
+Independence: same mutable source needs different failure mechanisms and a concrete A-pass/B-fail adversary. Same-model/different-prompt/free-form LLM judgment is advisory. secret_redaction_scan must be self_silent and control-file diffs still need actual secret inspection.
 
-contract_lock: frozen=predicates, scope, artifacts, independence, secret policy; repairable=bootstrap-authored check strings for quoting, precedence, paths, self_silent, timeout guards. verifier_smoke must pass after bootstrap/repair.
+contract_lock: frozen=predicates, scope, artifacts, independence, secret policy; repairable=bootstrap check strings for quoting, precedence, paths, self_silent, timeout guards. verifier_smoke passes after bootstrap/repair.
 
 ## 3 loop
 
@@ -74,7 +74,7 @@ contract_lock: frozen=predicates, scope, artifacts, independence, secret policy;
     iteration_soft_limit: adaptive_default
     timeout_policy: adaptive_per_command; choose per-command timeout from expected runtime, prior evidence, and command-native progress signals
 
-Controls steer; they do not stop. On iteration_soft_limit, shrink checkpoint, switch axis, or choose a smaller verifier-backed checkpoint. Every command needs a hang guard, but no fixed global seconds cap. Markdown token/wall-clock fields are not cost controls; use host/runtime budgets. Control-file-only work is valid only for bootstrap, verifier_repair, milestone_boundary, final verification, or explicit harness maintenance.
+Controls steer, not stop. Soft limit -> shrink checkpoint, switch axis, or smaller verifier-backed work. Use per-command hang guards, never a fixed global seconds cap. Markdown budgets are records only. Control-only work is valid for bootstrap, verifier_repair, milestone_boundary, final verification, or harness maintenance.
 
 ## 4 files_to_read
 
@@ -94,13 +94,13 @@ Controls steer; they do not stop. On iteration_soft_limit, shrink checkpoint, sw
       action: run signal_a, signal_b, full_suite_command, and secret_redaction_scan.
       evidence: fresh E# rows prove terminal_outcome success or verified_unmet; milestone_gate satisfied if PLAN.md is used.
 
-scope_frozen: scope_may_change and scope_must_not_change lock after setup/bootstrap. Later expansion is not input-waiting: choose smaller in-scope checkpoint, verifier_repair if eligible, route_discovery, or milestone-only verified_unmet plus next_bounded_path. verifier_repair cannot change predicates, scope, artifacts, independence, or secret policy.
+scope_frozen: scope_may_change/scope_must_not_change lock after setup/bootstrap. Later expansion routes to smaller in-scope work, eligible verifier_repair, route_discovery, or milestone-only verified_unmet plus next_bounded_path. verifier_repair cannot change predicates, scope, artifacts, independence, or secret policy.
 
-false_gate_rule: evidence-backed false predicates are progress. Record them in open_gates, retain promoted facts, and set next_bounded_path. Do not use a false readiness decision as host completion for build/research/continue objectives.
+false_gate_rule: evidence-backed false predicates are progress only when recorded in open_gates with promoted facts and next_bounded_path. False readiness is not host completion for build/research/continue objectives.
 
-roadmap_memory_rule: for long-running build/research, cp_final either satisfies done_gate or updates PLAN/PROGRESS with promoted facts, open_gates, next_bounded_path/route_discovery, and reusable artifacts. Missing terminal proof becomes a concrete next evidence task, not a PROGRESS-only update.
+roadmap_memory_rule: long-running cp_final either satisfies done_gate or writes promoted facts, open_gates, next_bounded_path/route_discovery, reusable artifacts, and the next evidence task. Missing terminal proof is not a PROGRESS-only update.
 
-current_task_rule: every non-control turn starts from GOAL/PROGRESS/PLAN current_task priority and ends with current_task done plus new current_task, or blocked plus different concrete route. If none exists for an active long-running goal, create one from PLAN active milestone and start it when safe. Checklist state follows the same evidence row.
+current_task_rule: each non-control turn follows GOAL/PROGRESS/PLAN priority and ends with current_task done plus new current_task, or blocked plus a different concrete route. If none exists, create one from PLAN active milestone and start it when safe. Checklist state follows the same E#.
 
 ## 6 axes
 
@@ -121,5 +121,5 @@ After three failures on one axis_value, switch axis or escalate. Use only labels
 ## 8 post_run_review
 
     rerun signal_a and signal_b.
-    confirm terminal_outcome, host_complete_policy, anchored source_close_authority, continuation_markers, open_gates, current_task, checklist_state, route_queue, next_bounded_path, objective_fidelity/unmet evidence, final fresh E#, milestone_gate, escalations, secret scan, optional verifier registry/audit_guard, and scope_may_change.
+    confirm outcome, policy, source_close, continuation, open_gates, current_task, checklist, route_queue, next_bounded_path, objective_fidelity/unmet evidence, fresh final E#, milestone_gate, escalations, secret scan, verifier registry/audit_guard, and scope_may_change/scope_must_not_change.
     operator_only: /goal clear after host completion if desired.

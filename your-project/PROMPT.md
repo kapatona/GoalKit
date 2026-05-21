@@ -1,80 +1,59 @@
 # GoalKit Turn Protocol
 
-Active per-turn protocol for multi-day unattended goals. Keep work tied to
-GOAL.md, PLAN.md, and PROGRESS.md.
+Active per-turn protocol for long unattended `/goal` runs. `AGENTS.md` and
+`GOAL.md` remain canonical; this file keeps the loop short.
 
-## 0 Contract
+## 0 Constants
 
-Markdown cannot stop, pause, clear, or complete host `/goal`; it only routes
-local work. The model may call `update_goal complete` only for proven completion
-and `update_goal blocked` only after Codex's repeated-blocker audit. Pause,
-resume, clear, budget-limited, and usage-limited are host/user/system controls.
+- Markdown cannot stop, pause, clear, or complete host `/goal`.
+- `update_goal complete` only after GOAL.md completion policy passes.
+- `update_goal blocked` only after Codex's repeated-blocker audit passes.
+- Every non-control turn produces or verifies project work.
+- Control-only exceptions: bootstrap, verifier repair, milestone boundary, final
+  verification, explicit harness maintenance.
 
-Every non-control turn must produce or verify one meaningful project artifact.
-Valid control exceptions: bootstrap, verifier repair, milestone boundary, final
-verification, explicit harness maintenance.
+## 1 Read And Anchor
 
-## 1 Read
-
-Read in order:
+Read only what is needed, in order:
 
 1. `AGENTS.md`
 2. `GOAL.md`
 3. `PLAN.md` if named or multi-milestone
 4. `PROGRESS.md`
-5. this `PROMPT.md`
-6. active `goals/*.md`, `docs/PROJECT_MEMORY.md`, and files named by the active
-   checkpoint or route
-
-Do not preload unrelated files. After compaction, rebuild from these files.
-
-## 2 Anchor
+5. this file
+6. active `goals/*.md`, memory docs, and files named by current task/route
 
 Before acting, derive:
 
 ```text
-objective=<GOAL source_objective or PLAN active milestone>
+objective=<GOAL objective or PLAN milestone>
 checkpoint=<GOAL checkpoint>
 current_task=<PROGRESS current_task or PLAN next_exact_task>
-checklist_state=<PROGRESS checklist_state or PLAN checklist>
-done_gate=<GOAL predicates and signals>
-next_route=<PROGRESS next_action or route_queue item>
+checklist_state=<PROGRESS/PLAN checklist state>
+done_gate=<GOAL predicates/signals>
+route=<PROGRESS next_action, route_queue, or next_bounded_path>
 host_policy=<host_complete_policy>
 ```
 
-The host `/goal` objective is canonical. Treat broad objectives as execution
-intent; do not redefine success around existing work.
+Broad objectives are execution intent. Do not redefine success around existing
+work.
 
-## 3 Local Gate
+## 2 Work Loop
 
-Check workspace-root regular files `STOP` and `DONE`.
+Handle local signals first:
 
-- `STOP`: write/update operator state, then route next evidence path.
-- `DONE`: run final verification; complete only if GOAL.md permits.
-- `local_gated`: transition, not wait. Repair, shrink scope, choose smaller
-  checkpoint, run route discovery, or create next evidence milestone.
-- `blocked`: host-block only after the same blocker_hash repeats for three goal
-  turns, no safe route or finite close remains, and `blocked_external_required`
-  names the exact external condition.
+- `STOP`: write operator state and choose a safe next route.
+- `DONE`: run final verification; close only if GOAL.md permits.
+- `local_gated`: transition by repair, smaller in-scope route, route discovery,
+  or finite close guard; never repeat the same blocker.
+- `blocked`: host-block only after three repeated blocker hashes, no safe route,
+  and exact `blocked_external_required`.
 
-Never spend the whole turn repeating the same blocker.
+Choose one package by priority: newest user instruction, PROGRESS current_task,
+route_queue, PLAN active_detail_override, active milestone next_exact_task,
+next_bounded_path, route discovery.
 
-## 4 Choose Work
-
-Choose one coherent package: code, analysis/tool run, domain artifact, fixture,
-script, verifier/test, real blocker resolution, or milestone advance.
-
-Priority:
-
-1. newest user instruction
-2. `PROGRESS.md current_task`
-3. first `route_queue` item
-4. `PLAN.md active_detail_override`
-5. active milestone `next_exact_task`
-6. `next_bounded_path`
-7. route discovery
-
-Before acting, state:
+Before work, state the local rationale:
 
 ```text
 Changing/running <X> will produce/verify <Y> and advance <P#> because <Z>.
@@ -82,55 +61,41 @@ distinct_from_failed=<axis|none>
 builds_on=<E#/L#|none>
 ```
 
-## 5 Act
+Then act. Do not stop after reading controls, planning, or editing only control
+files when safe project work remains. If broad work lacks `current_task`, create
+one from PLAN and start it when safe. Respect scope and never weaken predicates,
+independence, artifacts, secret policy, or verifiers except allowed repair.
 
-Complete the package. Do not stop after planning, reading controls, or editing
-only GOAL/PLAN/PROGRESS when safe project action remains. If active broad work
-lacks `current_task`, create one from PLAN and start it when safe.
+## 3 Verify And Route
 
-Respect scope: edit only `scope_may_change`; do not edit `scope_must_not_change`;
-do not weaken predicates, independence, artifacts, secret policy, or verifiers
-except through allowed verifier repair.
+Run the package verifier, reduced verifier, or safe smoke check. Evidence-only
+work must record inspected facts and the predicate it advances.
 
-## 6 Verify
+Completion signals must be deterministic, different tool paths, read-only
+fixtures/oracles, or anchored checklists. LLM judgment alone is not independent.
 
-Run the package verifier, reduced verifier, or safe smoke check. For
-evidence-only work, record what was inspected and why it advances the predicate.
+If a predicate is false, preserve useful facts and write the next route:
 
-Independent completion signals must be deterministic checks, different tool
-paths, read-only fixtures/oracles, or anchored checklists. LLM judgment alone is
-not independent.
-
-## 7 Route
-
-If a predicate is false, preserve facts and route forward:
-
-- record false gate in PROGRESS.md
-- carry it to PLAN.md when it affects the roadmap
-- set `next_bounded_path`, route_queue, or route-discovery artifact
-- write next `current_task`
-- create/update milestone handoff for long-running projects
+- PROGRESS evidence and false gate
+- PLAN carry-forward when roadmap-affecting
+- next_bounded_path, route_queue, or route-discovery artifact
+- next current_task
+- milestone handoff for long-running work
 
 `verified_unmet` is a milestone report for broad build/research/analysis/continue
-goals, not host completion unless original source text explicitly authorizes an
-unmet report as final.
+goals, not host completion unless original source text authorizes final unmet.
 
-## 8 Record
+## 4 Record And Audit
 
 Update PROGRESS.md only after substantive work, verifier output, bootstrap,
 milestone boundary, or real escalation. Keep it as an index, not a transcript.
-
-Record current_task status/output/verifier/next task, checklist_state, artifacts,
-literal verifier result, kept/not_kept evidence, false predicates, next route,
-evidence-backed lessons, and risks that affect the next turn.
-For final/audit evidence, mirror the decisive E# rows in `evidence_jsonl` when
-that section exists.
-
-## 9 Audit
+Record current_task, checklist_state, artifacts, literal verifier result,
+kept/not_kept evidence, false predicates, next route, lessons, and risks. Mirror
+decisive final/audit E# rows in `evidence_jsonl` when present.
 
 If `checks/goalkit_audit.py` exists, run the relevant mode before ending when the
-turn touches local gates, unmet states, milestone boundary state, current_task
-routing, or final completion:
+turn touches local gates, unmet states, milestone boundary, current_task routing,
+or final completion:
 
 ```bash
 python checks/goalkit_audit.py --root . --mode productive-turn
@@ -140,30 +105,25 @@ python checks/goalkit_audit.py --root . --mode all
 
 If audit fails, fix route/evidence. Do not weaken the goal contract.
 
-## 10 Complete
+## 5 Complete Or Block
 
-Call host completion only when GOAL.md allows it:
+Host completion requires GOAL.md permission plus fresh evidence:
 
-- `terminal_outcome=success`
-- done_gate passes with fresh independent signals
-- objective_fidelity passes
-- open_gates are none
-- current_task has no executable next
-- checklist_state is complete if present
-- route_queue is empty
-- secret scan is clean
+- terminal_outcome success, or finite source-authorized unmet close
+- done_gate and objective_fidelity pass
+- open_gates none
+- no executable current_task, route_queue item, or checklist item remains
+- secret scan clean
 - no unresolved escalation affects completion
 
-Finite audit/report `verified_unmet` may close host only when
-`source_close_authority` names `source=USER_GOAL` or a source file and quotes
-exact original unmet-as-final text, with no continuation markers, no open route,
-and fresh independent signals.
+Finite audit/report `verified_unmet` may close host only with anchored
+`source_close_authority`, no continuation markers, no open route, and fresh
+independent signals.
 
-Real impasse may call `update_goal blocked` only after the repeated-blocker audit
-passes. A self-written `blocked_audit: pass` line is insufficient. Never block
-because work is hard, slow, uncertain, or merely incomplete.
+Real impasse may call `update_goal blocked` only after strict repeated-blocker
+audit. Never block because work is hard, slow, uncertain, or merely incomplete.
 
-## 11 Final Output
+## 6 Final Output
 
 End every turn with exactly:
 

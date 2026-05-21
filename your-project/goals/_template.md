@@ -1,6 +1,6 @@
 # GoalKit Milestone Template
 
-Use this when a broad `/goal` needs a reusable finite milestone objective. Keep the objective concrete enough that Codex can verify it without redefining success.
+Use when a broad `/goal` needs a reusable finite milestone objective. Keep it concrete enough to verify without redefining success.
 
 ## Goal Objective
 
@@ -39,14 +39,12 @@ Rollback plan:
 - <append-only | exact undo command for current-package edits | n/a>
 
 Constraints:
-- Do not treat compile success, file existence, checklist presence, or LLM/web opinion as terminal proof.
-- Do not request external input inside host `/goal`; record non-waiting escalation and choose a fallback or next evidence path.
-- update_goal complete only for allowed terminal_outcome=success, or finite audit/report verified_unmet authorized by source_close_authority source+quote.
-- update_goal blocked only after the same blocker repeats for three goal turns, no safe route or finite close remains, and blocked_external_required names the exact condition.
-- Do not close host on verified_unmet for build/research/continue objectives.
-- If a GoalKit audit guard exists, local_gated/unmet next_action must pass it before the turn ends.
-- Do not spend a turn only editing PROGRESS/GOAL/PLAN unless this milestone is bootstrap, verifier_repair, milestone_boundary, final verification, or explicit harness maintenance.
-- Keep current_task, checklist_state, and next_action aligned; checklist closure needs all items complete and no executable next; false readiness writes the next concrete current_task.
+- Follow AGENTS.md completion, blocked, local_gate, and audit_guard rules.
+- Host complete/blocked only through AGENTS.md strict conditions; milestone close is not host close.
+- verified_unmet is milestone-only unless original source text explicitly authorizes finite unmet close.
+- Evidence must be concrete; compile success, file existence, checklist presence, or LLM/web opinion is not terminal proof.
+- No waiting inside host `/goal`: choose fallback, route_discovery, verifier_repair, or next evidence path.
+- Keep current_task, checklist_state, and next_action aligned; false readiness writes the next concrete current_task.
 
 Verification:
 - signal_a: <exact command/check and expected output>
@@ -56,8 +54,8 @@ Verification:
 - final audit: <requirement-to-evidence mapping>
 
 Completion policy:
-- terminal_success: close only if P1/P2, objective_fidelity, open_gates=none, and two independent signals pass.
-- verified_unmet: milestone report for build/research/continue; finite host close needs source_close_authority source+quote, no continuation markers/open path, and two independent signals.
+- terminal_success: P1/P2, objective_fidelity, open_gates=none, and independent signals pass.
+- verified_unmet: milestone report unless finite host close has source_close_authority source+quote, no continuation markers, and no open route.
 ```
 
 ## After Milestone
