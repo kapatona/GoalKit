@@ -1,69 +1,49 @@
-# GoalKit
+# GoalKit-Compact
 
-Markdown harness for long Codex CLI or Codex app `/goal` runs.
+Minimal project memory for long Codex `/goal` runs.
 
-GoalKit is for multi-hour or multi-day Codex work where the agent needs local
-state, evidence, project memory, milestones, and completion guards.
+Codex owns the host goal, lifecycle, compaction, token budget, and final goal
+status. GoalKit-Compact only adds the local contract Codex does not know:
+the project done gate, current resume snapshot, durable decisions, and optional
+verifier checks.
 
-## Install
+## Use
 
-Copy the contents of `your-project/` into your project root.
+Copy `your-project/` into a target repo, or copy its contents into the repo
+root:
 
 ```text
 your-project/
   AGENTS.md
   GOAL.md
-  PLAN.md
   PROGRESS.md
-  PROMPT.md
-  HARNESS.md
-  checks/goalkit_audit.py
-  docs/PROJECT_MEMORY.md
-  goals/_template.md
+  DECISIONS.md
+  checks/
+    goalkit_audit.py
+    holdout_guard.py
+    verifier_lock.py
+    scope_guard.py
 ```
 
-Do not blindly overwrite an existing project's `AGENTS.md`, `GOAL.md`,
-`PLAN.md`, `PROGRESS.md`, `PROMPT.md`, `HARNESS.md`, `checks/`, `docs/`, or
-`goals/`. Inspect and merge first.
+If the target repo already has `AGENTS.md`, merge the rules instead of
+overwriting project-specific instructions.
 
-## Direct Start
+## Start
 
-Use a normal `/goal`:
+1. Fill `GOAL.md`.
+2. Start Codex with one objective and one verifiable stopping condition.
+3. Work on project files first.
+4. Verify with tests, commands, diffs, or inspected artifacts.
+5. Replace `PROGRESS.md` once with the latest state.
+6. Append only durable, evidence-backed decisions to `DECISIONS.md`.
 
-```text
-/goal <your detailed objective>
-```
+`PROGRESS.md` is a resume snapshot, not a transcript. Keep it under 60 lines.
 
-Examples:
+## Rules
 
-```text
-/goal Add JWT login to this app, including database migration, API endpoints, UI flow, tests, and documentation.
-```
-
-```text
-/goal Execute <plan-file>.md in full detail.
-```
-
-Do not paste GoalKit's internal file list into the goal prompt. Once the files
-are in the project root, the harness is loaded from the project files.
-
-## Files
-
-- `AGENTS.md`: core runtime rules
-- `GOAL.md`: active local goal contract and done gate
-- `PLAN.md`: multi-milestone roadmap
-- `PROGRESS.md`: current task, state, evidence, activity, lessons
-- `PROMPT.md`: short per-turn protocol
-- `HARNESS.md`: operator/debugging manual
-- `checks/goalkit_audit.py`: automatic guard used by the harness when present
-- `docs/PROJECT_MEMORY.md`: durable facts, rejected paths, verifier registry
-- `goals/_template.md`: reusable sub-goal template
-
-## Notes
-
-- Codex `/goal` remains the host runtime. GoalKit only provides local project
-  control files.
-- Markdown files cannot pause, resume, clear, or stop the host goal.
-- Completion is expected to be evidence-based, not a checklist or readiness
-  claim.
-- For details, read `HARNESS.md` and `AGENTS.md`.
+- One goal, one stopping condition.
+- Raw project artifacts and verifier outputs are the evidence of record.
+- No ledgers, route queues, JSON mirrors, or recurring memory rewrites.
+- Completion requires fresh evidence and no executable in-scope next task.
+- Blocking requires an exact external condition, not difficulty or uncertainty.
+- Strict checks are executable guards, not a second workflow engine.
